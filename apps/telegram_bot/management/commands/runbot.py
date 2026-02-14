@@ -13,6 +13,12 @@ from apps.telegram_bot.profile_handler import (
     show_profiles_menu,
     show_main_menu,  # Importante para el comando /menu
 )
+from apps.telegram_bot.config_handler import show_global_config, config_conv_handler
+from apps.telegram_bot.sizes_handler import (
+    show_sizes_menu,
+    toggle_size_status,
+    sizes_conv_handler,
+)
 
 logger = logging.getLogger("django")
 
@@ -47,6 +53,9 @@ class Command(BaseCommand):
         # 2. Perfiles (Prioridad Alta - Conversation)
         application.add_handler(profile_conv_handler)
 
+        application.add_handler(config_conv_handler)
+        application.add_handler(sizes_conv_handler)
+
         # 3. Onboarding
         application.add_handler(onboarding_handler)
 
@@ -61,6 +70,18 @@ class Command(BaseCommand):
         application.add_handler(
             CallbackQueryHandler(show_profiles_menu, pattern="^config_profiles$")
         )
+        application.add_handler(
+            CallbackQueryHandler(show_global_config, pattern="^config_globals$")
+        )
+        # Entrar al menú tallas
+        application.add_handler(
+            CallbackQueryHandler(show_sizes_menu, pattern="^manage_sizes$")
+        )
+        # Activar/Desactivar
+        application.add_handler(
+            CallbackQueryHandler(toggle_size_status, pattern=r"^toggle_size_")
+        )
+
         self.stdout.write(
             self.style.SUCCESS("🤖 BabyBot escuchando (Timeouts extendidos)...")
         )
