@@ -59,3 +59,31 @@ class LactationLog(models.Model):
     def __str__(self):
         status = "🟢 En curso" if not self.end_time else "🔴 Finalizada"
         return f"Lactancia {self.start_time.strftime('%d/%m %H:%M')} ({status})"
+
+
+class FeedingLog(models.Model):
+    profile = models.ForeignKey(
+        "profiles.Profile", on_delete=models.CASCADE, related_name="feedings"
+    )
+    reporter = models.ForeignKey(
+        "users.TelegramUser", on_delete=models.SET_NULL, null=True
+    )
+
+    start_time = models.DateTimeField(verbose_name="Inicio")
+    end_time = models.DateTimeField(verbose_name="Fin")
+
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-end_time"]
+        verbose_name = "Registro de Lactancia"
+
+    @property
+    def duration_minutes(self):
+        delta = self.end_time - self.start_time
+        return int(delta.total_seconds() / 60)
+
+    def __str__(self):
+        return f"{self.profile.name} - {self.start_time.strftime('%d/%m %H:%M')}"

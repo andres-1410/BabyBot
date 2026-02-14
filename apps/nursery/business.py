@@ -1,3 +1,4 @@
+from datetime import timedelta
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from apps.nursery.models import DiaperLog, DiaperInventory
@@ -8,6 +9,12 @@ from apps.core_config.utils import (
     DEFAULT_DIAPER_THRESHOLD,
 )
 from apps.profiles.models import Profile
+from apps.nursery.models import FeedingLog
+from apps.core_config.utils import (
+    get_setting,
+    KEY_LACTATION_INTERVAL,
+    DEFAULT_LACTATION_INTERVAL,
+)
 
 
 async def registrar_uso_panal(
@@ -56,3 +63,32 @@ async def registrar_uso_panal(
         trigger_alert = True
 
     return log, current_stock, trigger_alert
+
+
+async def registrar_lactancia(
+    profile_id, start_time, end_time, reporter_user, observation=""
+):
+    """
+    1. Guarda el registro.
+    2. Calcula la próxima toma sumando el intervalo global a la hora de FIN.
+    """
+    profile = await sync_to_async(Profile.objects.get)(id=profile_id)
+
+    # 1. Guardar Log
+    log = await sync_to_async(FeedingLog.objects.create)(
+        profile=profile,
+        reporter=reporter_user,
+        start_time=start_time,
+        end_time=end_time,
+        observation=observation,
+    )
+
+    # 2. Calcular Próxima Toma
+    # Obtenemos el intervalo (String "3.0" -> Float 3.0)
+    interval_str = await get_setting(KEY_LACTATION_INTERVAL, DEFAULT_LACTATION_INTERVAL)
+    interval_hours = float(interval_str)
+
+    # La próxima toma se calcula desde que TERMINÓ de comer
+    next_feeding_time = end_time + timedelta(hours=interval_hours)
+
+    return log, next_feeding_time
