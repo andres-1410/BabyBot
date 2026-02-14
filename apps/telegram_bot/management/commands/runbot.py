@@ -24,7 +24,7 @@ from apps.telegram_bot.notifications_handler import (
     show_user_preferences,
     toggle_notification_setting,
 )
-from apps.telegram_bot.nursery_handler import diaper_conv_handler
+from apps.telegram_bot.nursery_handler import diaper_conv_handler, restock_conv_handler
 
 logger = logging.getLogger("django")
 
@@ -56,6 +56,7 @@ class Command(BaseCommand):
         application.add_handler(admin_approval_handler)
         application.add_handler(rejection_handler)
         application.add_handler(diaper_conv_handler)
+        application.add_handler(restock_conv_handler)
 
         # 2. Perfiles (Prioridad Alta - Conversation)
         application.add_handler(profile_conv_handler)

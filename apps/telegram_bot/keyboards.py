@@ -39,3 +39,23 @@ def get_profiles_menu():
         [InlineKeyboardButton("🔙 Volver", callback_data="menu_config")],
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+# --- MENÚ REACRGA PAÑALES (Módulo 4) ---
+
+
+def get_config_menu():
+    keyboard = [
+        [
+            InlineKeyboardButton("📦 Recargar Pañales", callback_data="restock_diapers")
+        ],  # <--- NUEVO BOTÓN
+        [InlineKeyboardButton("👥 Perfiles", callback_data="config_profiles")],
+        [InlineKeyboardButton("🌐 Globales", callback_data="config_globals")],
+        [
+            InlineKeyboardButton(
+                "🔔 Notificaciones", callback_data="config_notifications"
+            )
+        ],
+        [InlineKeyboardButton("🔙 Volver", callback_data="main_menu")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
