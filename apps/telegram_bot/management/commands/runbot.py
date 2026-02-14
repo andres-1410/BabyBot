@@ -6,6 +6,7 @@ from telegram.constants import ParseMode
 
 # Importamos el handler que acabamos de crear
 from apps.telegram_bot.onboarding import onboarding_handler
+from apps.telegram_bot.admin_handler import admin_approval_handler, rejection_handler
 
 logger = logging.getLogger("django")
 
@@ -32,6 +33,12 @@ class Command(BaseCommand):
             .pool_timeout(30)
             .build()
         )
+
+        # REGISTRO DE HANDLERS (Orden Importante)
+
+        # 1. Admin Approval (Tiene prioridad alta porque captura callbacks específicos)
+        application.add_handler(admin_approval_handler)
+        application.add_handler(rejection_handler)
 
         # Registrar el manejador de Onboarding (Módulo 1)
         application.add_handler(onboarding_handler)
