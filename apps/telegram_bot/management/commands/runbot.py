@@ -19,6 +19,11 @@ from apps.telegram_bot.sizes_handler import (
     toggle_size_status,
     sizes_conv_handler,
 )
+from apps.telegram_bot.notifications_handler import (
+    show_users_for_notifications,
+    show_user_preferences,
+    toggle_notification_setting,
+)
 
 logger = logging.getLogger("django")
 
@@ -80,6 +85,20 @@ class Command(BaseCommand):
         # Activar/Desactivar
         application.add_handler(
             CallbackQueryHandler(toggle_size_status, pattern=r"^toggle_size_")
+        )
+        # Lista usuarios
+        application.add_handler(
+            CallbackQueryHandler(
+                show_users_for_notifications, pattern="^config_notifications$"
+            )
+        )
+        # Ver panel usuario
+        application.add_handler(
+            CallbackQueryHandler(show_user_preferences, pattern=r"^config_notif_user_")
+        )
+        # Switch ON/OFF
+        application.add_handler(
+            CallbackQueryHandler(toggle_notification_setting, pattern=r"^toggle_notif_")
         )
 
         self.stdout.write(
