@@ -1,12 +1,18 @@
 import os
 import logging
 from django.core.management.base import BaseCommand
-from telegram.ext import ApplicationBuilder, Defaults
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler
 from telegram.constants import ParseMode
 
 # Importamos el handler que acabamos de crear
 from apps.telegram_bot.onboarding import onboarding_handler
 from apps.telegram_bot.admin_handler import admin_approval_handler, rejection_handler
+from apps.telegram_bot.profile_handler import (
+    profile_conv_handler,
+    show_config_menu,
+    show_profiles_menu,
+    show_main_menu,  # Importante para el comando /menu
+)
 
 logger = logging.getLogger("django")
 
@@ -34,15 +40,27 @@ class Command(BaseCommand):
             .build()
         )
 
-        # REGISTRO DE HANDLERS (Orden Importante)
-
-        # 1. Admin Approval (Tiene prioridad alta porque captura callbacks específicos)
+        # 1. Admin Approval (Prioridad Alta)
         application.add_handler(admin_approval_handler)
         application.add_handler(rejection_handler)
 
-        # Registrar el manejador de Onboarding (Módulo 1)
+        # 2. Perfiles (Prioridad Alta - Conversation)
+        application.add_handler(profile_conv_handler)
+
+        # 3. Onboarding
         application.add_handler(onboarding_handler)
 
+        # 4. Navegación General (Prioridad Baja)
+        application.add_handler(CommandHandler("menu", show_main_menu))
+        application.add_handler(
+            CallbackQueryHandler(show_main_menu, pattern="^main_menu$")
+        )
+        application.add_handler(
+            CallbackQueryHandler(show_config_menu, pattern="^menu_config$")
+        )
+        application.add_handler(
+            CallbackQueryHandler(show_profiles_menu, pattern="^config_profiles$")
+        )
         self.stdout.write(
             self.style.SUCCESS("🤖 BabyBot escuchando (Timeouts extendidos)...")
         )
