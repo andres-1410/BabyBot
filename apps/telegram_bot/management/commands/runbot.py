@@ -37,6 +37,7 @@ from apps.telegram_bot.health_handler import (
 )
 
 from apps.telegram_bot.reports_handler import reports_conv_handler
+from apps.telegram_bot.import_handler import import_conv_handler
 
 logger = logging.getLogger("django")
 
@@ -77,6 +78,8 @@ class Command(BaseCommand):
         application.add_handler(appointment_conv)
         application.add_handler(results_conv)
         application.add_handler(reports_conv_handler)
+        application.add_handler(admin_approval_handler)
+        application.add_handler(import_conv_handler)
 
         # 3. Onboarding
         application.add_handler(onboarding_handler)
@@ -134,15 +137,15 @@ class Command(BaseCommand):
         # es mejor pasar la hora directa.
 
         job_queue = application.job_queue
-        # job_queue.run_daily(
-        #     daily_appointment_check, time=time(hour=12, minute=0, second=0)
-        # )
-        job_queue.run_once(daily_appointment_check, when=30)
-        self.stdout.write(
-            self.style.SUCCESS(
-                "⏰ Tarea de prueba programada para ejecutarse en 30s..."
-            )
+        job_queue.run_daily(
+            daily_appointment_check, time=time(hour=12, minute=0, second=0)
         )
+        # job_queue.run_once(daily_appointment_check, when=30)
+        # self.stdout.write(
+        #     self.style.SUCCESS(
+        #         "⏰ Tarea de prueba programada para ejecutarse en 30s..."
+        #     )
+        # )
 
         self.stdout.write(
             self.style.SUCCESS(
