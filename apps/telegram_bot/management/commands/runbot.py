@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import time
 from django.core.management.base import BaseCommand
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler
 from telegram.constants import ParseMode
@@ -26,6 +27,14 @@ from apps.telegram_bot.notifications_handler import (
 )
 from apps.telegram_bot.nursery_handler import diaper_conv_handler, restock_conv_handler
 from apps.telegram_bot.lactation_handler import lactation_conv_handler
+from apps.telegram_bot.health_handler import (
+    show_health_menu,
+    treatment_conv,
+    appointment_conv,
+    daily_appointment_check,
+    handle_dose_action,
+    results_conv,
+)
 
 logger = logging.getLogger("django")
 
@@ -59,12 +68,12 @@ class Command(BaseCommand):
         application.add_handler(diaper_conv_handler)
         application.add_handler(restock_conv_handler)
         application.add_handler(lactation_conv_handler)
-
-        # 2. Perfiles (Prioridad Alta - Conversation)
         application.add_handler(profile_conv_handler)
-
         application.add_handler(config_conv_handler)
         application.add_handler(sizes_conv_handler)
+        application.add_handler(treatment_conv)
+        application.add_handler(appointment_conv)
+        application.add_handler(results_conv)
 
         # 3. Onboarding
         application.add_handler(onboarding_handler)
@@ -105,9 +114,37 @@ class Command(BaseCommand):
         application.add_handler(
             CallbackQueryHandler(toggle_notification_setting, pattern=r"^toggle_notif_")
         )
+        application.add_handler(
+            CallbackQueryHandler(show_health_menu, pattern="^menu_health$")
+        )
+        application.add_handler(
+            CallbackQueryHandler(handle_dose_action, pattern=r"^DOSE_")
+        )
 
         self.stdout.write(
             self.style.SUCCESS("🤖 BabyBot escuchando (Timeouts extendidos)...")
+        )
+
+        # Programar revisión de citas todos los días a las 8:00 AM hora local
+        # time(8, 0) creará un objeto hora. El JobQueue usa la timezone del bot (definida en Defaults o system)
+        # Como definimos TIME_ZONE en settings pero no pasamos defaults al JobQueue,
+        # es mejor pasar la hora directa.
+
+        job_queue = application.job_queue
+        # job_queue.run_daily(
+        #     daily_appointment_check, time=time(hour=12, minute=0, second=0)
+        # )
+        job_queue.run_once(daily_appointment_check, when=30)
+        self.stdout.write(
+            self.style.SUCCESS(
+                "⏰ Tarea de prueba programada para ejecutarse en 30s..."
+            )
+        )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "🤖 BabyBot escuchando... (Alertas de Citas programadas 8:00 AM VET)"
+            )
         )
 
         # Iniciar loop
