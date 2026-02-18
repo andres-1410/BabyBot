@@ -36,6 +36,8 @@ from apps.telegram_bot.health_handler import (
     results_conv,
 )
 
+from apps.telegram_bot.reports_handler import reports_conv_handler
+
 logger = logging.getLogger("django")
 
 
@@ -74,6 +76,7 @@ class Command(BaseCommand):
         application.add_handler(treatment_conv)
         application.add_handler(appointment_conv)
         application.add_handler(results_conv)
+        application.add_handler(reports_conv_handler)
 
         # 3. Onboarding
         application.add_handler(onboarding_handler)

@@ -10,7 +10,7 @@ def get_main_menu():
         ],
         [
             InlineKeyboardButton("💊 Salud", callback_data="menu_health"),
-            InlineKeyboardButton("📋 Resumen", callback_data="menu_summary"),
+            InlineKeyboardButton("📋 Resumen", callback_data="menu_status"),
         ],
         [InlineKeyboardButton("⚙️ Configuración", callback_data="menu_config")],
     ]
