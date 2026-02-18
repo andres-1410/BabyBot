@@ -13,3 +13,8 @@ python-telegram-bot==22.5
 sqlparse==0.5.5
 typing-extensions==4.15.0
 tzlocal==5.3.1
+# --- PRODUCCIÓN RENDER ---
+gunicorn==21.2.0
+dj-database-url==2.1.0
+psycopg2-binary==2.9.9
+whitenoise==6.6.0   
