@@ -20,22 +20,20 @@ from apps.core_config.utils import (
 # 1. Configuración del Logger
 logger = logging.getLogger("apps.telegram_bot")
 
-# Estados de la conversación para editar valores
+# Estados
 EDIT_LACTATION, EDIT_THRESHOLD = range(2)
 
 
 async def show_global_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra el menú de Globales con los valores actuales"""
+    """Muestra el menú de Globales"""
     query = update.callback_query
     await query.answer()
 
-    # Obtener valores actuales (Async)
     lactation_val = await get_setting(
         KEY_LACTATION_INTERVAL, DEFAULT_LACTATION_INTERVAL
     )
     threshold_val = await get_setting(KEY_DIAPER_THRESHOLD, DEFAULT_DIAPER_THRESHOLD)
 
-    # Construir el teclado dinámico
     keyboard = [
         [
             InlineKeyboardButton(
@@ -47,16 +45,13 @@ async def show_global_config(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"📉 Umbral Pañales: {threshold_val}", callback_data="edit_threshold"
             )
         ],
-        # Este botón nos llevará al siguiente paso del Módulo 3.1
         [InlineKeyboardButton("🏷️ Gestionar Tallas", callback_data="manage_sizes")],
         [InlineKeyboardButton("🔙 Volver", callback_data="menu_config")],
     ]
 
     await query.edit_message_text(
         "🌐 **Configuraciones Globales**\n\n"
-        "Aquí defines las reglas del juego:\n"
-        "• **Intervalo:** Cada cuánto come Ignacio.\n"
-        "• **Umbral:** Cuándo avisar que se acaban los pañales.\n\n"
+        "Reglas del sistema para alertas y cálculos.\n"
         "Selecciona para editar:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
@@ -79,32 +74,31 @@ async def ask_lactation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_lactation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    value = update.message.text.replace(",", ".")  # Aceptamos coma o punto
+    value = update.message.text.replace(",", ".")
 
     try:
-        float(value)  # Validamos que sea número
+        float(value)
         await set_setting(KEY_LACTATION_INTERVAL, value, "Horas entre tomas")
 
-        # LOG DE ÉXITO
         logger.info(
-            f"Configuración Actualizada: Intervalo Lactancia a {value} hrs por {user.first_name} (ID: {user.id})"
+            f"Config: Intervalo Lactancia -> {value} hrs (por {user.first_name})"
         )
 
-        await update.message.reply_text(f"✅ Intervalo actualizado a **{value} hrs**.")
-
-        # Volver a mostrar instrucción de menú
+        # 1. Mensaje Persistente
         await update.message.reply_text(
-            "Usa /menu -> Configuración -> Globales para ver el cambio.",
+            f"✅ **CONFIGURACIÓN ACTUALIZADA**\n"
+            f"⏱️ Nuevo intervalo: **{value} horas**",
+            parse_mode="Markdown",
+        )
+
+        # 2. Navegación
+        await update.message.reply_text(
+            "Regresando al menú...",
             reply_markup=get_config_menu(),
         )
         return ConversationHandler.END
 
     except ValueError:
-        # LOG DE ERROR DE VALIDACIÓN
-        logger.warning(
-            f"Error Validación: {user.first_name} intentó poner '{value}' en lactancia."
-        )
-
         await update.message.reply_text(
             "⚠️ Por favor ingresa un número válido (Ej: 3.0):"
         )
@@ -119,7 +113,7 @@ async def ask_threshold(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.edit_message_text(
         "📉 **Editar Umbral de Alerta**\n\n"
-        "¿A partir de cuántos pañales quieres que te avise para comprar más? (Ej: `15`):",
+        "¿A partir de cuántos pañales quieres la alerta de stock bajo? (Ej: `15`):",
         parse_mode="Markdown",
     )
     return EDIT_THRESHOLD
@@ -132,32 +126,29 @@ async def save_threshold(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if value.isdigit():
         await set_setting(KEY_DIAPER_THRESHOLD, value, "Mínimo de pañales")
 
-        # LOG DE ÉXITO
-        logger.info(
-            f"Configuración Actualizada: Umbral Pañales a {value} por {user.first_name} (ID: {user.id})"
+        logger.info(f"Config: Umbral Pañales -> {value} (por {user.first_name})")
+
+        # 1. Mensaje Persistente
+        await update.message.reply_text(
+            f"✅ **CONFIGURACIÓN ACTUALIZADA**\n"
+            f"📉 Nuevo umbral de alerta: **{value} unidades**",
+            parse_mode="Markdown",
         )
 
+        # 2. Navegación
         await update.message.reply_text(
-            f"✅ Umbral actualizado a **{value} unidades**."
-        )
-        await update.message.reply_text(
-            "Usa /menu -> Configuración -> Globales para ver el cambio.",
+            "Regresando al menú...",
             reply_markup=get_config_menu(),
         )
         return ConversationHandler.END
     else:
-        # LOG DE ERROR DE VALIDACIÓN
-        logger.warning(
-            f"Error Validación: {user.first_name} intentó poner '{value}' en umbral pañales."
-        )
-
         await update.message.reply_text(
             "⚠️ Por favor ingresa un número entero (Ej: 15):"
         )
         return EDIT_THRESHOLD
 
 
-# --- HANDLER DE CONVERSACIÓN ---
+# --- HANDLER ---
 config_conv_handler = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(ask_lactation, pattern="^edit_lactation$"),

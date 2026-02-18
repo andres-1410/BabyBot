@@ -14,9 +14,7 @@ from django.utils import timezone
 from apps.profiles.models import Profile
 from apps.users.models import TelegramUser
 from apps.nursery.business import registrar_lactancia
-from apps.notifications.services import (
-    send_alert,
-)  # <--- Necesario para enviar la alerta
+from apps.notifications.services import send_alert
 from apps.telegram_bot.keyboards import get_main_menu
 
 logger = logging.getLogger("apps.telegram_bot")
@@ -32,7 +30,6 @@ logger = logging.getLogger("apps.telegram_bot")
 ) = range(6)
 
 
-# --- NAVEGACIÓN ---
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query:
@@ -43,22 +40,23 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- TAREA DE ALARMA (EL DESPERTADOR) ---
+# --- TAREA DE ALARMA (BROADCAST) ---
 async def alarm_lactation_callback(context: ContextTypes.DEFAULT_TYPE):
-    """Esta función se ejecuta automáticamente cuando el tiempo se cumple"""
+    """Alerta global a todos los cuidadores"""
     job = context.job
     profile_name = job.data.get("profile_name")
 
-    # Enviamos la alerta usando el servicio central de notificaciones
-    msg = f"🍼 **¡Hora de comer!**\n\nYa toca la siguiente toma de **{profile_name}**."
+    msg = f"🍼 **¡HORA DE COMER!**\n\nYa toca la siguiente toma de **{profile_name}**."
+
+    # Usamos send_alert con el tag 'alert_lactation' que configuramos en el Módulo 3.2
+    # Esto enviará el mensaje a TODOS los usuarios que tengan activada esa preferencia.
     await send_alert(context.bot, "alert_lactation", msg)
 
 
-# --- INICIO ---
+# --- FLUJO ---
 async def start_lactation_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     babies = await sync_to_async(list)(
         Profile.objects.filter(profile_type=Profile.ProfileType.BABY)
     )
@@ -67,43 +65,35 @@ async def start_lactation_flow(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["feed_profile_id"] = babies[0].id
         context.user_data["feed_profile_name"] = babies[0].name
         return await ask_mode_step(update, context)
-
     return ConversationHandler.END
 
 
 async def ask_mode_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = context.user_data["feed_profile_name"]
     keyboard = [
-        [
-            InlineKeyboardButton(
-                "▶️ Iniciar Ahora (Cronómetro)", callback_data="MODE_TIMER"
-            )
-        ],
-        [InlineKeyboardButton("🕒 Registro Manual", callback_data="MODE_MANUAL")],
+        [InlineKeyboardButton("▶️ Iniciar (Cronómetro)", callback_data="MODE_TIMER")],
+        [InlineKeyboardButton("🕒 Manual", callback_data="MODE_MANUAL")],
         [InlineKeyboardButton("🔙 Cancelar", callback_data="main_menu")],
     ]
     await update.callback_query.edit_message_text(
-        f"🤱 **Lactancia: {name}**\n\n¿Cómo deseas registrar la toma?",
+        f"🤱 **Lactancia: {name}**\n\n¿Cómo registramos?",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
     return CHOOSE_MODE
 
 
-# --- MODO CRONÓMETRO ---
+# --- CRONÓMETRO ---
 async def start_timer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     start_time = timezone.now()
     context.user_data["feed_start_time"] = start_time
-    local_start = timezone.localtime(start_time).strftime("%I:%M %p")
+    local = timezone.localtime(start_time).strftime("%I:%M %p")
 
     keyboard = [[InlineKeyboardButton("⏹️ Terminar Toma", callback_data="STOP_TIMER")]]
     await query.edit_message_text(
-        f"⏱️ **Lactancia en Curso...**\n\n"
-        f"▶️ Inicio: {local_start}\n"
-        f"Presiona el botón cuando termine.",
+        f"⏱️ **Lactancia en Curso...**\n▶️ Inicio: {local}\n\nPresiona al terminar.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
@@ -113,109 +103,119 @@ async def start_timer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stop_timer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     end_time = timezone.now()
     context.user_data["feed_end_time"] = end_time
-
-    start_time = context.user_data["feed_start_time"]
-    duration = int((end_time - start_time).total_seconds() / 60)
-
+    duration = int(
+        (end_time - context.user_data["feed_start_time"]).total_seconds() / 60
+    )
     await query.edit_message_text(
-        f"✅ **Toma Finalizada**\n"
-        f"⏱️ Duración: {duration} min.\n\n"
-        f"📝 **¿Alguna observación?**\n(Escribe 'ninguna' o detalle):",
+        f"✅ **Toma Finalizada**\n⏱️ Duración: {duration} min.\n\n📝 **¿Observación?**",
         parse_mode="Markdown",
     )
     return INPUT_OBSERVATION
 
 
-# --- MODO MANUAL ---
+# --- MANUAL ---
 async def start_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "🕒 **Hora de Inicio**\nFormato 24hrs (Ej: `14:30`):", parse_mode="Markdown"
+        "🕒 **Hora de Inicio (HH:MM)**:", parse_mode="Markdown"
     )
     return MANUAL_START
 
 
 async def save_manual_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
     try:
-        t = datetime.strptime(text, "%H:%M").time()
-        now_ve = timezone.localtime()
-        dt_naive = datetime.combine(now_ve.date(), t)
-        start = timezone.make_aware(dt_naive, timezone.get_current_timezone())
-
+        t = datetime.strptime(update.message.text.strip(), "%H:%M").time()
+        start = timezone.make_aware(
+            datetime.combine(timezone.localtime().date(), t),
+            timezone.get_current_timezone(),
+        )
         context.user_data["feed_start_time"] = start
-        await update.message.reply_text("⏱️ **¿Cuántos minutos duró?** (Ej: `20`):")
+        await update.message.reply_text("⏱️ **¿Duración en minutos?** (Ej: 20):")
         return MANUAL_END
-    except ValueError:
-        await update.message.reply_text("⚠️ Formato incorrecto. Usa HH:MM.")
+    except:
+        await update.message.reply_text("⚠️ Formato incorrecto.")
         return MANUAL_START
 
 
 async def save_manual_end(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    if not text.isdigit():
-        await update.message.reply_text("⚠️ Ingresa solo números.")
+    if not update.message.text.isdigit():
         return MANUAL_END
-
-    minutes = int(text)
-    start = context.user_data["feed_start_time"]
-    end = start + timedelta(minutes=minutes)
-    context.user_data["feed_end_time"] = end
-
-    await update.message.reply_text(
-        "📝 **¿Alguna observación?**\n(Escribe 'ninguna' o detalle):"
-    )
+    mins = int(update.message.text)
+    context.user_data["feed_end_time"] = context.user_data[
+        "feed_start_time"
+    ] + timedelta(minutes=mins)
+    await update.message.reply_text("📝 **¿Observación?**")
     return INPUT_OBSERVATION
 
 
-# --- FINALIZAR Y PROGRAMAR ALARMA ---
+# --- FINALIZAR (PERSISTENCIA + BROADCAST) ---
 async def save_observation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     obs = update.message.text
     if obs.lower() == "ninguna":
         obs = ""
 
-    profile_id = context.user_data["feed_profile_id"]
-    profile_name = context.user_data["feed_profile_name"]
-    start = context.user_data["feed_start_time"]
-    end = context.user_data["feed_end_time"]
+    pid = context.user_data["feed_profile_id"]
+    pname = context.user_data["feed_profile_name"]
     reporter = await sync_to_async(TelegramUser.objects.get)(
         telegram_id=update.effective_user.id
     )
 
-    # 1. Guardar en BD y calcular próxima (Lógica Negocio)
-    log, next_feed = await registrar_lactancia(profile_id, start, end, reporter, obs)
+    log, next_feed = await registrar_lactancia(
+        pid,
+        context.user_data["feed_start_time"],
+        context.user_data["feed_end_time"],
+        reporter,
+        obs,
+    )
 
-    # 2. PROGRAMAR LA ALARMA (JobQueue)
-    # run_once acepta datetime aware (con zona horaria), Telegram se encarga de esperar.
+    # Programar alarma
     context.job_queue.run_once(
         alarm_lactation_callback,
         when=next_feed,
-        data={"profile_name": profile_name},
-        name=f"lactation_alert_{profile_id}",  # Nombre único para poder cancelarla si hiciera falta
+        data={"profile_name": pname},
+        name=f"lactation_alert_{pid}",
     )
 
-    # Formateo para feedback
+    # 1. Mensaje Persistente al usuario actual
     duration = log.duration_minutes
     next_local = timezone.localtime(next_feed).strftime("%I:%M %p")
 
-    await update.message.reply_text(
-        f"✅ **Lactancia Guardada**\n\n"
-        f"👶 {log.profile.name}\n"
+    msg_history = (
+        f"✅ **LACTANCIA REGISTRADA**\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"👶 {pname}\n"
         f"⏱️ Duración: {duration} min\n"
-        f"📝 Obs: {obs if obs else 'Ninguna'}\n\n"
-        f"⏰ **Próxima Toma: {next_local}**\n"
-        f"🔔 *Alarma programada exitosamente.*",
-        parse_mode="Markdown",
-        reply_markup=get_main_menu(),
+        f"📝 Obs: {obs or 'Ninguna'}\n"
+        f"⏰ **Próxima: {next_local}**\n"
+        f"━━━━━━━━━━━━━━━━━━"
     )
+    await update.message.reply_text(msg_history, parse_mode="Markdown")
+    await update.message.reply_text("🏠 Menú Principal", reply_markup=get_main_menu())
+
+    # 2. BROADCAST (Seguridad Global)
+    # Avisar a los demás que el bebé ya comió
+    reporter_name = reporter.nickname or reporter.first_name
+    broadcast_msg = (
+        f"ℹ️ **AVISO DE LACTANCIA**\n\n"
+        f"**{reporter_name}** acaba de registrar una toma.\n"
+        f"👶 {pname} | ⏱️ {duration} min\n"
+        f"⏰ Próxima: {next_local}"
+    )
+    # Enviamos a todos los que tengan alerta de lactancia (menos al que reportó, que ya vio el mensaje arriba)
+    await send_alert(
+        context.bot,
+        "alert_lactation",
+        broadcast_msg,
+        exclude_user_id=reporter.telegram_id,
+    )
+
     return ConversationHandler.END
 
 
-# --- HANDLER ---
+# HANDLER
 lactation_conv_handler = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(start_lactation_flow, pattern="^menu_lactation$")
@@ -227,13 +227,9 @@ lactation_conv_handler = ConversationHandler(
             CallbackQueryHandler(show_main_menu, pattern="^main_menu$"),
         ],
         TIMER_RUNNING: [CallbackQueryHandler(stop_timer, pattern="^STOP_TIMER$")],
-        MANUAL_START: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_manual_start)
-        ],
-        MANUAL_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_manual_end)],
-        INPUT_OBSERVATION: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_observation)
-        ],
+        MANUAL_START: [MessageHandler(filters.TEXT, save_manual_start)],
+        MANUAL_END: [MessageHandler(filters.TEXT, save_manual_end)],
+        INPUT_OBSERVATION: [MessageHandler(filters.TEXT, save_observation)],
     },
     fallbacks=[CallbackQueryHandler(show_main_menu, pattern="^main_menu$")],
     per_chat=True,

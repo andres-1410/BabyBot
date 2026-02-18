@@ -7,23 +7,41 @@ from apps.notifications.models import UserAlertPreference
 logger = logging.getLogger("apps.notifications")
 
 
-async def send_alert(bot, topic_field, message):
+def _get_subscribers(topic_field, exclude_id=None):
     """
-    Envía una alerta a todos los usuarios que tengan activada la preferencia 'topic_field'.
-    Ej: topic_field='alert_diapers'
+    Función síncrona auxiliar para consultar la BD.
+    Filtra usuarios activos, con la preferencia activada y excluye al remitente si es necesario.
     """
-    # 1. Buscar usuarios activos con la preferencia activada
-    # Nota: Django ORM filter con relaciones
-    prefs = await sync_to_async(list)(
-        UserAlertPreference.objects.filter(
-            user__is_active=True, **{topic_field: True}
-        ).select_related("user")
-    )
+    filters = {"user__is_active": True, topic_field: True}
+
+    qs = UserAlertPreference.objects.filter(**filters).select_related("user")
+
+    if exclude_id:
+        qs = qs.exclude(user__telegram_id=exclude_id)
+
+    return list(qs)
+
+
+async def send_alert(bot, topic_field, message, exclude_user_id=None):
+    """
+    Envía una alerta a todos los usuarios suscritos a 'topic_field'.
+
+    Args:
+        bot: Instancia del bot.
+        topic_field: Nombre del campo en UserAlertPreference (ej: 'alert_diapers').
+        message: Texto a enviar.
+        exclude_user_id: (Opcional) Telegram ID del usuario a excluir (ej. quien generó la acción).
+    """
+    # 1. Obtener destinatarios (Ejecutamos la consulta en hilo seguro)
+    prefs = await sync_to_async(_get_subscribers)(topic_field, exclude_user_id)
 
     count = 0
     for pref in prefs:
         try:
-            await bot.send_message(chat_id=pref.user.telegram_id, text=message)
+            # Enviar mensaje con Markdown
+            await bot.send_message(
+                chat_id=pref.user.telegram_id, text=message, parse_mode="Markdown"
+            )
             count += 1
         except Exception as e:
             logger.error(f"Fallo enviando alerta a {pref.user}: {e}")

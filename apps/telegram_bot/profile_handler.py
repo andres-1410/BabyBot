@@ -26,7 +26,7 @@ ASK_NAME, ASK_TYPE, ASK_BIRTHDATE = range(3)
 
 # --- NAVEGACIÓN DE MENÚS (Controladores visuales) ---
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra el menú principal (Responde a /menu o botón Volver)"""
+    """Muestra el menú principal"""
     if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(
@@ -52,7 +52,6 @@ async def show_profiles_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
 
-    # Consultamos perfiles existentes para mostrarlos (Feedback visual)
     count = await sync_to_async(Profile.objects.count)()
     text = f"👥 **Gestión de Perfiles**\nHay {count} perfil(es) registrado(s)."
 
@@ -68,6 +67,7 @@ async def start_add_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Paso 1: Pedir Nombre"""
     query = update.callback_query
     await query.answer()
+    # Editamos el mensaje anterior para mantener limpieza hasta que se complete la acción
     await query.edit_message_text(
         "📝 **Nuevo Perfil**\n\nPor favor, escribe el **Nombre** del perfil (Ej: Ignacio):",
         parse_mode="Markdown",
@@ -80,13 +80,12 @@ async def save_name_ask_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
     name = update.message.text
     context.user_data["profile_name"] = name
 
-    # Botones para seleccionar tipo (Bebé o Adulto)
     keyboard = [
         [InlineKeyboardButton("👶 Bebé", callback_data="TYPE_BABY")],
         [InlineKeyboardButton("🧑 Adulto", callback_data="TYPE_ADULT")],
     ]
     await update.message.reply_text(
-        f"✅ Nombre: {name}.\n\n¿Qué **tipo** de perfil es?\n*(Selecciona 'Bebé' para activar funciones de pañales y lactancia)*",
+        f"✅ Nombre: **{name}**.\n\n¿Qué **tipo** de perfil es?\n*(Selecciona 'Bebé' para activar funciones de pañales y lactancia)*",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
@@ -98,8 +97,7 @@ async def save_type_ask_date(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
 
-    type_selection = query.data  # TYPE_BABY o TYPE_ADULT
-    # Mapeamos al modelo de Django
+    type_selection = query.data
     profile_type = (
         Profile.ProfileType.BABY
         if type_selection == "TYPE_BABY"
@@ -116,29 +114,36 @@ async def save_type_ask_date(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def save_profile_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Paso Final: Validar fecha, Guardar en BD y Confirmar"""
+    """Paso Final: Validar, Guardar y Confirmar (PERSISTENTE)"""
     date_text = update.message.text
     try:
-        # Convertir texto a fecha
         birth_date = datetime.strptime(date_text, "%d/%m/%Y").date()
-
-        # Recuperar datos del contexto
         name = context.user_data["profile_name"]
         p_type = context.user_data["profile_type"]
 
-        # GUARDAR EN BD (Sync to Async)
+        # GUARDAR EN BD
         await sync_to_async(Profile.objects.create)(
             name=name, profile_type=p_type, birth_date=birth_date
         )
 
         logger.info(f"Nuevo perfil creado: {name} ({p_type})")
 
+        # 1. MENSAJE PERSISTENTE (Historial)
+        # No lleva botones de navegación para que no se edite después.
+        msg_history = (
+            f"✅ **PERFIL CREADO EXITOSAMENTE**\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"👤 **Nombre:** {name}\n"
+            f"🏷 **Tipo:** {p_type}\n"
+            f"🎂 **Fecha:** {birth_date.strftime('%d/%m/%Y')}\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        await update.message.reply_text(msg_history, parse_mode="Markdown")
+
+        # 2. MENSAJE DE NAVEGACIÓN (Volátil)
+        # Este es el que lleva el menú y se perderá al seguir navegando.
         await update.message.reply_text(
-            f"✅ **Perfil '{name}' creado exitosamente.**\n"
-            f"Tipo: {p_type}\n"
-            f"Fecha: {birth_date.strftime('%d/%m/%Y')}",
-            parse_mode="Markdown",
-            reply_markup=get_profiles_menu(),  # Volver al menú de perfiles
+            "¿Qué deseas hacer ahora?", reply_markup=get_profiles_menu()
         )
         return ConversationHandler.END
 
