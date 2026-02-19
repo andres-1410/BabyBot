@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DiaperInventory, DiaperLog, LactationLog
+from .models import DiaperInventory, DiaperLog, LactationLog, FeedingLog
 
 
 @admin.register(DiaperInventory)
@@ -12,13 +12,13 @@ class DiaperLogAdmin(admin.ModelAdmin):
     list_display = ("profile", "reporter", "time", "waste_type", "size_label", "notes")
 
 
-@admin.register(LactationLog)
-class LactationLogAdmin(admin.ModelAdmin):
+@admin.register(FeedingLog)
+class FeedingLogLogAdmin(admin.ModelAdmin):
     list_display = (
         "profile",
         "reporter",
         "start_time",
         "end_time",
-        "notes",
-        "is_manual_entry",
+        "observation",
+        "created_at",
     )
