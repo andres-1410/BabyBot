@@ -38,6 +38,7 @@ from apps.telegram_bot.health_handler import (
 
 from apps.telegram_bot.reports_handler import reports_conv_handler
 from apps.telegram_bot.import_handler import import_conv_handler
+from apps.telegram_bot.web_panel_handler import panel_handler
 
 logger = logging.getLogger("django")
 
@@ -80,6 +81,8 @@ class Command(BaseCommand):
         application.add_handler(reports_conv_handler)
         application.add_handler(admin_approval_handler)
         application.add_handler(import_conv_handler)
+        # 🆕 Comando Web Panel (Aislado)
+        application.add_handler(panel_handler)
 
         # 3. Onboarding
         application.add_handler(onboarding_handler)
